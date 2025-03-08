@@ -56,7 +56,7 @@ A high-performance columnar database that stores the trace data in a format opti
 
 2. Start the services:
    ```bash
-   docker-compose up
+   docker-compose up # or docker compose up
    ```
 
 3. Check if traces are being recorded:
