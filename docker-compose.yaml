@@ -1,0 +1,55 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"  # OTLP gRPC endpoint
+    networks:
+      - otel-network
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  tracegen:
+    build: ./tracegen
+    environment:
+      - COLLECTOR_HOST=otel-collector
+      - COLLECTOR_PORT=4317
+      - WORKERS=2
+      - TRACES_PER_WORKER=50
+      - RATE=10
+      - CONTINUOUS=true
+    networks:
+      - otel-network
+    depends_on:
+      - otel-collector
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native TCP interface
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - otel-network
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "default", "--password", "password", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  clickhouse_data:
+
+networks:
+  otel-network:
+    driver: bridge
