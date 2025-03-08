@@ -78,7 +78,7 @@ The main configuration files are:
 Run the included script to check the status of traces in ClickHouse:
 
 ```bash
-./check_traces.sh
+./scripts/check_traces.sh
 ```
 
 This will output:
