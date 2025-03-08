@@ -113,7 +113,7 @@ Modify the environment variables in `docker-compose.yaml` for the `tracegen` ser
 environment:
   - WORKERS=2           # Increase for more parallel generation
   - TRACES_PER_WORKER=50 # Increase for more traces per worker
-  - RATE=10             # Adjust the rate of generation
+  - RATE=10             # traces per second across all workers
 ```
 
 ### Changing ClickHouse Configuration
