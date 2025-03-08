@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+#########################################################
+# Wrapper script for trace generation
+# This script generates traces using the tracegen tool
+# and sends them to an OpenTelemetry collector.
+#
+# The script controls the rate of trace generation and
+# can run in continuous mode, generating traces at a
+# regular interval, or just once.
+#########################################################
+
 # Configuration with defaults
 # Collector settings
 COLLECTOR_HOST=${COLLECTOR_HOST:-otel-collector}
