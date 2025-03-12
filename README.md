@@ -1,6 +1,6 @@
-# OpenTelemetry with ClickHouse
+# OpenTelemetry with ClickHouse and qryn
 
-This project demonstrates how to set up an OpenTelemetry pipeline with ClickHouse as the backend storage. It uses tracegen for trace generation. The tracegen sends the traces to the otel collector and the collector exports these traces to Clickhouse.
+This project demonstrates how to set up an OpenTelemetry pipeline with ClickHouse as the backend storage and qryn as the observability platform. It uses tracegen for trace generation. The tracegen sends the traces to the otel collector and the collector exports these traces to Clickhouse, which can then be visualized using qryn.
 
 ## Architecture
 
@@ -9,6 +9,7 @@ The system consists of the following components:
 - **Trace Generator**: Simulates application traces using the OpenTelemetry tracegen tool
 - **OpenTelemetry Collector**: Receives, processes, and exports traces
 - **ClickHouse Database**: Stores traces for analysis and querying
+- **qryn**: Polyglot observability platform that connects to ClickHouse for visualizing traces, metrics, and logs
 
 ## Use Cases
 
@@ -16,7 +17,9 @@ Primarily this can be used for quick POC demos and concepts before moving to a p
 
 - **Trace Collection**: The OpenTelemetry Collector can be used to receive traces from multiple applications and export them to ClickHouse.
 
-- **Application Intergration**: Products like qryn, grafana, tempo can be integrated into the docker-compose file to visualize the traces.
+- **Application Integration**: Products like qryn, grafana, tempo can be integrated into the docker-compose file to visualize the traces.
+
+- **Full Observability Stack**: With qryn integrated, you get a complete observability solution with support for logs, metrics, and traces in a single platform.
 
 ## Components
 
@@ -38,6 +41,14 @@ Configured to:
 ### 3. ClickHouse Database
 
 A high-performance columnar database that stores the trace data in a format optimized for analytical queries.
+
+### 4. qryn Observability Platform
+
+A polyglot observability platform that:
+- Connects directly to ClickHouse for data access
+- Provides API compatibility with Loki, Prometheus, Tempo, and OpenTelemetry
+- Offers a unified interface for logs, metrics, and traces
+- Integrates with Grafana using native data sources
 
 ## Getting Started
 
@@ -64,6 +75,10 @@ A high-performance columnar database that stores the trace data in a format opti
    ./check_traces.sh
    ```
 
+4. Access qryn:
+   - qryn UI is available at http://localhost:3100
+   - Optionally connect Grafana to qryn using the Loki data source at http://qryn:3100
+
 ### Configuration
 
 The main configuration files are:
@@ -71,7 +86,7 @@ The main configuration files are:
 - **docker-compose.yaml**: Defines the services, networks, and volumes
 - **otel-collector-config.yaml**: Configures the OpenTelemetry Collector
 - **clickhouse-init.sql**: Initializes the ClickHouse database
-- **wrapper.sh**: Controls the trace generator behavior
+- **trace-generator.sh**: Controls the trace generator behavior
 
 ## Telemetrygen Configuration Guide
 
@@ -134,7 +149,7 @@ To reduce the load and frequency of traces:
 
 ```yaml
 environment:
-  - RATE=0.1             # One trace every 10 seconds per worker
+  - RATE=1             # One trace every 10 seconds per worker
   - RUN_INTERVAL=30      # Wait 30 seconds between runs
   - WORKERS=1            # Use just one worker
   - TRACES_PER_WORKER=1  # Generate only one trace per run
@@ -187,6 +202,75 @@ The actual number of traces generated depends on multiple factors:
 
 For example, with 2 workers, 5 traces each, and 3 child spans, you'll get 10 traces with 40 total spans (10 root spans + 30 child spans) per run.
 
+## qryn Configuration Guide
+
+qryn is a polyglot observability platform that connects to ClickHouse to provide visualization and querying capabilities for your telemetry data.
+
+### Basic Configuration
+
+The qryn service is configured in the docker-compose file with the following parameters:
+
+```yaml
+qryn:
+  image: qxip/qryn:latest
+  ports:
+    - "3100:3100"
+  environment:
+    - CLICKHOUSE_SERVER=clickhouse
+    - CLICKHOUSE_PORT=8123
+    - CLICKHOUSE_DB=otel
+    - CLICKHOUSE_AUTH=default:password
+  networks:
+    - otel-network
+  depends_on:
+    clickhouse:
+      condition: service_healthy
+```
+
+### Connecting to qryn
+
+qryn provides multiple API endpoints compatible with popular observability tools:
+
+1. **Loki API** (for logs): http://localhost:3100
+2. **Prometheus API** (for metrics): http://localhost:3100
+3. **Tempo API** (for traces): http://localhost:3100
+
+### Integrating with Grafana
+
+To visualize your data in Grafana:
+
+1. Add a Loki data source in Grafana:
+   - URL: http://qryn:3100
+   - Access: Server (default)
+
+2. Add a Tempo data source for traces:
+   - URL: http://qryn:3100
+   - Access: Server (default)
+
+3. Add a Prometheus data source for metrics:
+   - URL: http://qryn:3100
+   - Access: Server (default)
+
+### Advanced qryn Features
+
+qryn offers additional features that can be enabled through environment variables:
+
+```yaml
+environment:
+  # Basic connection
+  - CLICKHOUSE_SERVER=clickhouse
+  - CLICKHOUSE_PORT=8123
+  - CLICKHOUSE_DB=otel
+  - CLICKHOUSE_AUTH=default:password
+  
+  # Advanced settings
+  - LABELS_DAYS=7           # Retention period for labels in days
+  - SAMPLES_DAYS=7          # Retention period for samples in days
+  - DEBUG=false             # Enable debug logging
+  - CLOKI_USER=demo         # Basic auth username
+  - CLOKI_PASSWORD=demo     # Basic auth password
+```
+
 ## Monitoring
 
 Run the included script to check the status of traces in ClickHouse:
@@ -199,6 +283,8 @@ This will output:
 - Tables in the `otel` database
 - Sample data from each table
 - Row counts for each table
+
+You can also view traces directly in qryn's UI at http://localhost:3100 or through Grafana when connected to qryn.
 
 ## Troubleshooting
 
@@ -217,7 +303,12 @@ This will output:
    - Verify the collector endpoint is correct
    - Check network connectivity
 
-4. **Telemetrygen Configuration Issues**:
+4. **qryn cannot connect to ClickHouse**:
+   - Ensure qryn has the proper dependency configuration with `condition: service_healthy`
+   - Verify the ClickHouse connection parameters are correct
+   - Check network connectivity between qryn and ClickHouse
+
+5. **Telemetrygen Configuration Issues**:
    - Verify environment variables are being passed correctly:
      ```bash
      docker-compose exec telemetrygen env | grep RUN_INTERVAL
@@ -248,6 +339,10 @@ environment:
 ### Changing ClickHouse Configuration
 
 Custom ClickHouse configurations can be added through the docker-compose volumes.
+
+### Customizing qryn
+
+qryn can be customized with additional environment variables and configuration options. See the [qryn documentation](https://github.com/metrico/qryn/wiki) for more details.
 
 ## License
 
