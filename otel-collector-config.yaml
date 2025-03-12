@@ -2,32 +2,38 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
-
-processors:
-  batch:
-    timeout: 5s
+        endpoint: "0.0.0.0:4317"   # Bind to all interfaces
+      http:
+        endpoint: "0.0.0.0:4318"   # Bind to all interfaces
 
 exporters:
-  debug:
-    verbosity: detailed
-  
-  clickhouse:
-    endpoint: tcp://clickhouse:9000
-    database: otel
-    username: default
-    password: password
+  qryn:
+    # DSN using the native TCP protocol to connect to ClickHouse,
+    # targeting database "otel" with provided credentials.
+    dsn: "tcp://clickhouse:9000/otel?username=default&password=password"
     timeout: 10s
-    create_schema: true
+    sending_queue:
+      queue_size: 100
     retry_on_failure:
       enabled: true
       initial_interval: 5s
       max_interval: 30s
       max_elapsed_time: 300s
 
+processors:
+  batch:
+
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug, clickhouse]
+      exporters: [qryn]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [qryn]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [qryn]
