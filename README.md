@@ -2,6 +2,32 @@
 
 This project demonstrates how to set up an OpenTelemetry pipeline with ClickHouse as the backend storage and qryn as the observability platform. It uses tracegen for trace generation. The tracegen sends the traces to the otel collector and the collector exports these traces to Clickhouse, which can then be visualized using qryn.
 
+## Quickstart
+
+Just want to get up and running quickly? Follow these steps:
+
+```bash
+# 1. Clone this repository
+git clone git@github.com:lkendrickd/otel-clickhouse.git
+cd otel-clickhouse
+
+# 2. Start all services with a single command
+docker compose up -d
+
+# 3. Wait about 30 seconds for services to initialize
+
+# 4. Open qryn in your browser
+# http://localhost:3100
+
+# 5. To see if traces are being collected
+./scripts/check_traces.sh
+
+# 6. To shut everything down when you're done
+docker compose down
+```
+
+That's it! After a minute, you should see traces being collected and can explore them in the qryn interface.
+
 ## Architecture
 
 The system consists of the following components:
@@ -61,7 +87,7 @@ A polyglot observability platform that:
 
 1. Clone this repository:
    ```bash
-   git clone git@github.com:lkendrickd/otel-clickhouse.git
+   git clone git@github.com:lkendrickd/otel-clickhouse-qryn.git
    cd otel-clickhouse
    ```
 
@@ -70,7 +96,7 @@ A polyglot observability platform that:
    docker-compose up # or docker compose up
    ```
 
-3. Check if traces are being recorded:
+3. Optionally: Check if traces are being recorded:
    ```bash
    ./check_traces.sh
    ```
@@ -130,7 +156,7 @@ All parameters can be set as environment variables in your `docker-compose.yml` 
 |-----------|-------------|---------|---------|
 | `RANDOMIZE_CHILD_SPANS` | Randomize number of child spans | `false` | `true` |
 | `MIN_CHILD_SPANS` | Minimum spans when randomizing | `1` | `2` |
-| `MAX_CHILD_SPANS` | Maximum spans when randomizing | `5` | `10` |
+| `MAX_CHILD_SPANS` | Maximum spans when randomizing | `1` | `10` |
 | `RANDOMIZE_SPAN_DURATION` | Randomize span duration | `false` | `true` |
 | `MIN_SPAN_DURATION` | Minimum duration (ms) when randomizing | `10` | `5` |
 | `MAX_SPAN_DURATION` | Maximum duration (ms) when randomizing | `200` | `500` |
