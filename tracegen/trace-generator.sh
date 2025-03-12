@@ -1,5 +1,5 @@
 #!/bin/bash
-# Author: Converted from original script
+# Author: Dennis Kendrick
 # Description: Wrapper script for trace generation using the telemetrygen tool
 #              and sends them to an OpenTelemetry collector.
 #              
