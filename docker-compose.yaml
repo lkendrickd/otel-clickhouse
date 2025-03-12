@@ -19,22 +19,37 @@ services:
       context: tracegen
       dockerfile: Dockerfile
     environment:
+      # Connection settings
       - OTLP_ENDPOINT=otel-collector:4317
       - OTLP_INSECURE=true
+      - SERVICE_NAME=demo-service
+      
+      # Trace generation parameters
       - WORKERS=1
       - TRACES_PER_WORKER=5
       - RATE=5
       - CHILD_SPANS=2
-      - SERVICE_NAME=demo-service
       - SPAN_DURATION=10ms
+      - STATUS_CODE=0
+      
+      # Runtime settings
       - RUN_INTERVAL=30      # Run every 30 seconds
-      - RUN_COUNT=0         # Run indefinitely (0 = forever)
+      - RUN_COUNT=0          # Run indefinitely (0 = forever)
       - ENABLE_BATCH=true
-      # Optional randomization settings
+      
+      # Randomization settings
       - RANDOMIZE_CHILD_SPANS=true
+      - MIN_CHILD_SPANS=1
+      - MAX_CHILD_SPANS=5
       - RANDOMIZE_SPAN_DURATION=true
+      - MIN_SPAN_DURATION=10
+      - MAX_SPAN_DURATION=200
+      
       # Optional custom attributes (uncomment if needed)
       # - CUSTOM_ATTRIBUTES=env=\"demo\",region=\"us-east-1\"
+      
+      # Verbosity level (1=verbose, 0=quiet)
+      - VERBOSE=1
     restart: always
     networks:
       - otel-network
