@@ -1,5 +1,5 @@
 #!/bin/bash
-# Author: Converted from original script
+# Author: Dennis Kendrick
 # Description: Wrapper script for trace generation using the telemetrygen tool
 #              and sends them to an OpenTelemetry collector.
 #              
@@ -12,6 +12,8 @@
 # ./trace-generator.sh --service-name my-service --endpoint otel-collector:4317
 # 
 # Prereqs: telemetrygen tool must be installed
+#         telemetrygen can be installed via the following if Go is installed:
+#         go install github.com/open-telemetry/opentelemetry-collector-contrib/cmd/telemetrygen@latest
 #
 #-------------------------------------------------------------------
 # OPERATIONS - tasks that the script executes
