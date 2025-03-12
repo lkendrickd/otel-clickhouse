@@ -1,54 +1,60 @@
 version: '3.8'
 
 services:
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otel-collector-config.yaml"]
-    volumes:
-      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+  qryn:
+    image: qxip/qryn:latest
     ports:
-      - "4317:4317"  # OTLP gRPC endpoint
+      - "3100:3100"   # Qryn API endpoints (Tempo, Loki, Prometheus-compatible)
+    environment:
+      - CLICKHOUSE_SERVER=clickhouse       # Only hostname; protocol/port inferred
+      - CLICKHOUSE_PORT=8123               # Port for ClickHouse HTTP interface
+      - CLICKHOUSE_DB=otel                 # Database name to use
+      - CLICKHOUSE_AUTH=default:password   # Authentication credentials
+      - DEBUG=true                       # Enable debug logging for troubleshooting
     networks:
       - otel-network
     depends_on:
       clickhouse:
         condition: service_healthy
 
+  otel-collector:
+    image: ghcr.io/metrico/qryn-otel-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC endpoint
+    networks:
+      - otel-network
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      qryn:
+        condition: service_started
+
   telemetrygen:
     build:
       context: tracegen
       dockerfile: Dockerfile
     environment:
-      # Connection settings
       - OTLP_ENDPOINT=otel-collector:4317
       - OTLP_INSECURE=true
       - SERVICE_NAME=demo-service
-      
-      # Trace generation parameters
       - WORKERS=1
       - TRACES_PER_WORKER=5
       - RATE=5
       - CHILD_SPANS=2
       - SPAN_DURATION=10ms
       - STATUS_CODE=0
-      
-      # Runtime settings
-      - RUN_INTERVAL=30      # Run every 30 seconds
-      - RUN_COUNT=0          # Run indefinitely (0 = forever)
+      - RUN_INTERVAL=30
+      - RUN_COUNT=0
       - ENABLE_BATCH=true
-      
-      # Randomization settings
       - RANDOMIZE_CHILD_SPANS=true
       - MIN_CHILD_SPANS=1
       - MAX_CHILD_SPANS=5
       - RANDOMIZE_SPAN_DURATION=true
       - MIN_SPAN_DURATION=10
       - MAX_SPAN_DURATION=200
-      
-      # Optional custom attributes (uncomment if needed)
-      # - CUSTOM_ATTRIBUTES=env=\"demo\",region=\"us-east-1\"
-      
-      # Verbosity level (1=verbose, 0=quiet)
       - VERBOSE=1
     restart: always
     networks:
@@ -59,8 +65,8 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native TCP interface
+      - "8123:8123"  # HTTP interface (used by qryn)
+      - "9000:9000"  # Native TCP interface (used by the collector exporter)
     environment:
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=password
