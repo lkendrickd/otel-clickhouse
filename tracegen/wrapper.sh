@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+##########################################################
+# Wrapper script for trace generation
+#
+# This script generates traces using the telemetrygen tool
+# and sends them to an OpenTelemetry collector.
+#
+# The script controls the rate of trace generation and
+# can run in continuous mode, generating traces at a
+# regular interval, or just once.
+##########################################################
+
 # ANSI color codes for pretty logging
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -9,37 +20,38 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Get configuration from environment variables with defaults
+# Collector settings
 OTLP_ENDPOINT=${OTLP_ENDPOINT:-"otel-collector:4317"}
 OTLP_INSECURE=${OTLP_INSECURE:-"true"}
 OTLP_HTTP=${OTLP_HTTP:-"false"}
 SERVICE_NAME=${SERVICE_NAME:-"telemetrygen-service"}
 
 # Trace generation parameters
-WORKERS=${WORKERS:-1}
-TRACES_PER_WORKER=${TRACES_PER_WORKER:-1}
-CHILD_SPANS=${CHILD_SPANS:-1}
-RATE=${RATE:-1}
-SPAN_DURATION=${SPAN_DURATION:-"100ms"}
-STATUS_CODE=${STATUS_CODE:-"0"}
+WORKERS=${WORKERS:-1}            # Number of parallel trace-generating workers
+TRACES_PER_WORKER=${TRACES_PER_WORKER:-1}  # Number of trace trees each worker generates
+CHILD_SPANS=${CHILD_SPANS:-1}    # Number of child spans per trace
+RATE=${RATE:-1}                  # Rate limiting: traces per second per worker
+SPAN_DURATION=${SPAN_DURATION:-"100ms"}  # Duration of each generated span
+STATUS_CODE=${STATUS_CODE:-"0"}  # Status code for spans (0=Unset, 1=Error, 2=Ok)
 
 # Randomization options
-RANDOMIZE_CHILD_SPANS=${RANDOMIZE_CHILD_SPANS:-"false"}
-MIN_CHILD_SPANS=${MIN_CHILD_SPANS:-1}
-MAX_CHILD_SPANS=${MAX_CHILD_SPANS:-5}
+RANDOMIZE_CHILD_SPANS=${RANDOMIZE_CHILD_SPANS:-"false"}  # Whether to randomize child span count
+MIN_CHILD_SPANS=${MIN_CHILD_SPANS:-1}                    # Minimum spans when randomizing
+MAX_CHILD_SPANS=${MAX_CHILD_SPANS:-5}                    # Maximum spans when randomizing
 
-RANDOMIZE_SPAN_DURATION=${RANDOMIZE_SPAN_DURATION:-"false"}
-MIN_SPAN_DURATION=${MIN_SPAN_DURATION:-10}  # in milliseconds
-MAX_SPAN_DURATION=${MAX_SPAN_DURATION:-200} # in milliseconds
+RANDOMIZE_SPAN_DURATION=${RANDOMIZE_SPAN_DURATION:-"false"}  # Whether to randomize span duration
+MIN_SPAN_DURATION=${MIN_SPAN_DURATION:-10}   # Minimum duration in milliseconds
+MAX_SPAN_DURATION=${MAX_SPAN_DURATION:-200}  # Maximum duration in milliseconds
 
 # Runtime options
-RUN_INTERVAL=${RUN_INTERVAL:-60}  # seconds between runs
+RUN_INTERVAL=${RUN_INTERVAL:-60}  # Seconds between runs
 RUN_COUNT=${RUN_COUNT:-0}         # 0 = run forever, otherwise run this many times
 
 # Additional options
-ENABLE_BATCH=${ENABLE_BATCH:-"true"}
-CUSTOM_ATTRIBUTES=${CUSTOM_ATTRIBUTES:-""}
+ENABLE_BATCH=${ENABLE_BATCH:-"true"}  # Whether to batch traces
+CUSTOM_ATTRIBUTES=${CUSTOM_ATTRIBUTES:-""}  # Custom attributes for traces
 
-# Function to log with timestamp and color
+# Display configuration
 log() {
   local color=$1
   local message=$2
@@ -52,6 +64,16 @@ random_int() {
   local max=$2
   echo $((RANDOM % (max - min + 1) + min))
 }
+
+# Display configuration at startup
+log $YELLOW "Trace Generator Configuration:"
+log $YELLOW "├── Endpoint: $OTLP_ENDPOINT"
+log $YELLOW "├── Service Name: $SERVICE_NAME"
+log $YELLOW "├── Workers: $WORKERS"
+log $YELLOW "├── Traces per worker: $TRACES_PER_WORKER"
+log $YELLOW "├── Child spans: $CHILD_SPANS"
+log $YELLOW "├── Rate limit: $RATE traces/second/worker"
+log $YELLOW "└── Mode: $([ "$RUN_COUNT" = "0" ] && echo "Continuous (every ${RUN_INTERVAL}s)" || echo "Limited (${RUN_COUNT} runs)")"
 
 # Count how many runs we've done
 count=0
