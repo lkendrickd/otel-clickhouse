@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
@@ -12,15 +14,28 @@ services:
       clickhouse:
         condition: service_healthy
 
-  tracegen:
-    build: ./tracegen
+  telemetrygen:
+    build:
+      context: tracegen
+      dockerfile: Dockerfile
     environment:
-      - COLLECTOR_HOST=otel-collector
-      - COLLECTOR_PORT=4317
-      - WORKERS=2
-      - TRACES_PER_WORKER=50
-      - RATE=10
-      - CONTINUOUS=true
+      - OTLP_ENDPOINT=otel-collector:4317
+      - OTLP_INSECURE=true
+      - WORKERS=1
+      - TRACES_PER_WORKER=5
+      - RATE=5
+      - CHILD_SPANS=2
+      - SERVICE_NAME=demo-service
+      - SPAN_DURATION=10ms
+      - RUN_INTERVAL=30      # Run every 30 seconds
+      - RUN_COUNT=0         # Run indefinitely (0 = forever)
+      - ENABLE_BATCH=true
+      # Optional randomization settings
+      - RANDOMIZE_CHILD_SPANS=true
+      - RANDOMIZE_SPAN_DURATION=true
+      # Optional custom attributes (uncomment if needed)
+      # - CUSTOM_ATTRIBUTES=env=\"demo\",region=\"us-east-1\"
+    restart: always
     networks:
       - otel-network
     depends_on:

@@ -1,85 +1,132 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-#########################################################
-# Wrapper script for trace generation
-# This script generates traces using the tracegen tool
-# and sends them to an OpenTelemetry collector.
-#
-# The script controls the rate of trace generation and
-# can run in continuous mode, generating traces at a
-# regular interval, or just once.
-#########################################################
+# ANSI color codes for pretty logging
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-# Configuration with defaults
-# Collector settings
-COLLECTOR_HOST=${COLLECTOR_HOST:-otel-collector}
-COLLECTOR_PORT=${COLLECTOR_PORT:-4317}
-COLLECTOR_ENDPOINT="http://$COLLECTOR_HOST:$COLLECTOR_PORT"
+# Get configuration from environment variables with defaults
+OTLP_ENDPOINT=${OTLP_ENDPOINT:-"otel-collector:4317"}
+OTLP_INSECURE=${OTLP_INSECURE:-"true"}
+OTLP_HTTP=${OTLP_HTTP:-"false"}
+SERVICE_NAME=${SERVICE_NAME:-"telemetrygen-service"}
 
-# Trace generation settings
-WORKERS=${WORKERS:-2}              # Number of parallel trace-generating workers
-TRACES_PER_WORKER=${TRACES_PER_WORKER:-5}  # Number of trace trees each worker generates
-RATE=${RATE:-5}                   # Rate limiting: traces per second across all workers
-CONTINUOUS=${CONTINUOUS:-true}     # Whether to run continuously or just once
-INTERVAL=${INTERVAL:-60}           # Seconds between batches in continuous mode
-MAX_WAIT=${MAX_WAIT:-120}          # Maximum seconds to wait for collector
+# Trace generation parameters
+WORKERS=${WORKERS:-1}
+TRACES_PER_WORKER=${TRACES_PER_WORKER:-1}
+CHILD_SPANS=${CHILD_SPANS:-1}
+RATE=${RATE:-1}
+SPAN_DURATION=${SPAN_DURATION:-"100ms"}
+STATUS_CODE=${STATUS_CODE:-"0"}
 
-# Display configuration
-echo "Trace Generator Configuration:"
-echo "├── Collector: $COLLECTOR_ENDPOINT"
-echo "├── Workers: $WORKERS"
-echo "├── Traces per worker: $TRACES_PER_WORKER"
-echo "├── Rate limit: $RATE traces/second"
-echo "└── Mode: $([ "$CONTINUOUS" = "true" ] && echo "Continuous (every ${INTERVAL}s)" || echo "One-time")"
+# Randomization options
+RANDOMIZE_CHILD_SPANS=${RANDOMIZE_CHILD_SPANS:-"false"}
+MIN_CHILD_SPANS=${MIN_CHILD_SPANS:-1}
+MAX_CHILD_SPANS=${MAX_CHILD_SPANS:-5}
 
-# Wait for collector with timeout
-echo "Waiting for collector to be ready..."
-WAIT_COUNT=0
+RANDOMIZE_SPAN_DURATION=${RANDOMIZE_SPAN_DURATION:-"false"}
+MIN_SPAN_DURATION=${MIN_SPAN_DURATION:-10}  # in milliseconds
+MAX_SPAN_DURATION=${MAX_SPAN_DURATION:-200} # in milliseconds
 
-while ! nc -z $COLLECTOR_HOST $COLLECTOR_PORT; do
-  WAIT_COUNT=$((WAIT_COUNT+1))
-  
-  if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "Error: Collector not available after ${MAX_WAIT} seconds. Exiting."
-    exit 1
-  fi
-  
-  echo "Waiting for collector at $COLLECTOR_HOST:$COLLECTOR_PORT ($WAIT_COUNT/${MAX_WAIT}s)..."
-  sleep 1
-done
+# Runtime options
+RUN_INTERVAL=${RUN_INTERVAL:-60}  # seconds between runs
+RUN_COUNT=${RUN_COUNT:-0}         # 0 = run forever, otherwise run this many times
 
-echo "Collector is ready! Starting trace generation..."
+# Additional options
+ENABLE_BATCH=${ENABLE_BATCH:-"true"}
+CUSTOM_ATTRIBUTES=${CUSTOM_ATTRIBUTES:-""}
 
-# Set up networking
-export GRPC_DNS_RESOLVER=native
-export OTEL_EXPORTER_OTLP_ENDPOINT=$COLLECTOR_ENDPOINT
-
-# Function to generate traces
-generate_traces() {
-  echo "Generating batch of $((WORKERS * TRACES_PER_WORKER)) traces at $RATE/second..."
-  
-  # Execute tracegen with parameters
-  tracegen --otlp-endpoint=$COLLECTOR_HOST:$COLLECTOR_PORT \
-    --workers=$WORKERS \
-    --traces=$TRACES_PER_WORKER \
-    --rate=$RATE
-    
-  echo "Trace batch completed at $(date)"
+# Function to log with timestamp and color
+log() {
+  local color=$1
+  local message=$2
+  echo -e "${color}[$(date '+%Y-%m-%d %H:%M:%S')] $message${NC}"
 }
 
-# Run in either continuous or one-time mode
-if [ "$CONTINUOUS" = "true" ]; then
-  echo "Running in continuous mode, generating traces every $INTERVAL seconds..."
+# Function to generate a random integer between min and max (inclusive)
+random_int() {
+  local min=$1
+  local max=$2
+  echo $((RANDOM % (max - min + 1) + min))
+}
+
+# Count how many runs we've done
+count=0
+
+# Main loop
+while true; do
+  # Increment run counter
+  count=$((count + 1))
   
-  while true; do
-    generate_traces
-    
-    echo "Waiting $INTERVAL seconds before next batch..."
-    sleep $INTERVAL
-  done
-else
-  # Run once and exit
-  generate_traces
-  echo "One-time trace generation completed."
-fi
+  # Check if we've reached the run limit (if not 0)
+  if [ "$RUN_COUNT" -gt 0 ] && [ "$count" -gt "$RUN_COUNT" ]; then
+    log $GREEN "Completed $RUN_COUNT runs. Exiting."
+    exit 0
+  fi
+  
+  # Apply randomization if configured
+  if [ "$RANDOMIZE_CHILD_SPANS" == "true" ]; then
+    CHILD_SPANS=$(random_int $MIN_CHILD_SPANS $MAX_CHILD_SPANS)
+    log $BLUE "Randomized child spans: $CHILD_SPANS"
+  fi
+  
+  if [ "$RANDOMIZE_SPAN_DURATION" == "true" ]; then
+    rand_duration=$(random_int $MIN_SPAN_DURATION $MAX_SPAN_DURATION)
+    SPAN_DURATION="${rand_duration}ms"
+    log $BLUE "Randomized span duration: $SPAN_DURATION"
+  fi
+  
+  # Build the command
+  CMD="telemetrygen traces"
+  CMD+=" --otlp-endpoint $OTLP_ENDPOINT"
+  
+  # Add optional flags
+  [ "$OTLP_INSECURE" == "true" ] && CMD+=" --otlp-insecure"
+  [ "$OTLP_HTTP" == "true" ] && CMD+=" --otlp-http"
+  [ "$ENABLE_BATCH" == "true" ] && CMD+=" --batch"
+  
+  # Add required parameters
+  CMD+=" --workers $WORKERS"
+  CMD+=" --traces $TRACES_PER_WORKER"
+  CMD+=" --child-spans $CHILD_SPANS"
+  CMD+=" --rate $RATE"
+  CMD+=" --span-duration $SPAN_DURATION"
+  CMD+=" --status-code $STATUS_CODE"
+  CMD+=" --service $SERVICE_NAME"
+  
+  # Add custom attributes if defined
+  if [ -n "$CUSTOM_ATTRIBUTES" ]; then
+    # Split the string on commas and process each key=value pair
+    IFS=',' read -ra ATTR_ARRAY <<< "$CUSTOM_ATTRIBUTES"
+    for attr in "${ATTR_ARRAY[@]}"; do
+      CMD+=" --otlp-attributes $attr"
+    done
+  fi
+  
+  # Log and execute the command
+  log $YELLOW "Run #$count: Executing trace generation command"
+  log $BLUE "$CMD"
+  
+  # Execute the command
+  eval $CMD
+  
+  result=$?
+  if [ $result -eq 0 ]; then
+    log $GREEN "✓ Trace generation completed successfully"
+  else
+    log $RED "✗ Trace generation failed with exit code: $result"
+  fi
+  
+  # If we're not running forever, exit after one iteration
+  if [ "$RUN_INTERVAL" -eq 0 ]; then
+    log $YELLOW "Run interval set to 0. Exiting after one run."
+    exit 0
+  fi
+  
+  # Wait before the next iteration
+  log $BLUE "Waiting $RUN_INTERVAL seconds before next run..."
+  sleep $RUN_INTERVAL
+done
