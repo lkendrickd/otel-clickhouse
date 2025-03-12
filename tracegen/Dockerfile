@@ -10,15 +10,15 @@ RUN go install github.com/open-telemetry/opentelemetry-collector-contrib/cmd/tel
 # Stage 2: Create the final image
 FROM alpine:3.19
 
-# Install bash and utilities
+# Install bash and utilities (bash required for IFS array handling)
 RUN apk add --no-cache bash jq curl
 
 # Copy the binary from the builder stage
 COPY --from=builder /go/bin/telemetrygen /usr/local/bin/telemetrygen
 
-# Copy wrapper script
-COPY wrapper.sh /app/wrapper.sh
-RUN chmod +x /app/wrapper.sh
+# Copy trace generator script
+COPY trace-generator.sh /app/trace-generator.sh
+RUN chmod +x /app/trace-generator.sh
 
 # Set working directory
 WORKDIR /app
@@ -85,5 +85,5 @@ ENV ENABLE_BATCH="true"
 # "key1=\"value1\",key2=\"value2\",key3=true"
 ENV CUSTOM_ATTRIBUTES=""
 
-# Run wrapper script by default
-ENTRYPOINT ["/app/wrapper.sh"]
+# Run trace generator script by default
+ENTRYPOINT ["/app/trace-generator.sh"]
